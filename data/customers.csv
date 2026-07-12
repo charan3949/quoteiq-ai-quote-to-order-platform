@@ -1,0 +1,6 @@
+customer_id,customer_name,price_class,branch_id,credit_status
+CUST-1001,ABC Construction,CONTRACTOR_GOLD,PHX01,GOOD
+CUST-1002,Desert Ridge Builders,CONTRACTOR_STANDARD,PHX01,GOOD
+CUST-1003,Mesa Renovation Group,RETAIL,PHX01,HOLD
+CUST-1004,Sun Valley Framing,CONTRACTOR_GOLD,PHX01,GOOD
+CUST-1005,Cactus Commercial Builds,CONTRACTOR_STANDARD,PHX01,GOOD

@@ -1,0 +1,8 @@
+rule_id,customer_id,price_class,sku,category,rule_type,rule_value,priority
+PR-001,,CONTRACTOR_GOLD,,Lumber,discount_pct,12,2
+PR-002,,CONTRACTOR_GOLD,,Drywall,discount_pct,8,2
+PR-003,CUST-1001,,LBR-2X4X8-SPF,,fixed_price,4.10,1
+PR-004,,CONTRACTOR_STANDARD,,Panels,discount_pct,5,3
+PR-005,,CONTRACTOR_STANDARD,,Lumber,discount_pct,6,3
+PR-006,,RETAIL,,,discount_pct,0,5
+PR-007,CUST-1004,,DRY-12-4X8,,fixed_price,12.25,1

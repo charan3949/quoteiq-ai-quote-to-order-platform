@@ -1,0 +1,11 @@
+sku,product_name,category,description,brand,uom,base_cost,list_price,stock_qty,branch_id
+LBR-2X4X8-SPF,2x4x8 SPF Stud,Lumber,2 inch by 4 inch by 8 foot spruce pine fir framing stud,Generic,EA,3.10,4.75,1200,PHX01
+LBR-2X6X10-SPF,2x6x10 SPF Lumber,Lumber,2 inch by 6 inch by 10 foot spruce pine fir framing lumber,Generic,EA,6.75,10.25,650,PHX01
+LBR-4X4X8-PT,4x4x8 Pressure Treated Post,Lumber,4 inch by 4 inch by 8 foot pressure treated post,Generic,EA,9.80,15.50,320,PHX01
+DRY-12-4X8,1/2 inch Drywall Sheet,Drywall,Half inch 4x8 gypsum wallboard,USG,EA,9.25,13.50,450,PHX01
+DRY-58-4X8-FR,5/8 inch Fire Rated Drywall,Drywall,Five eighth inch fire rated 4x8 gypsum board,USG,EA,12.70,19.25,275,PHX01
+OSB-716-4X8,7/16 inch OSB Sheathing,Panels,7/16 inch oriented strand board 4x8 sheet,Generic,EA,10.80,16.25,300,PHX01
+PLY-34-4X8,3/4 inch Plywood Sheet,Panels,Three quarter inch plywood 4x8 sheet,Generic,EA,24.00,36.00,180,PHX01
+INS-R13-BATT,R13 Fiberglass Insulation Batt,Insulation,R13 wall insulation batt roll,Owens Corning,ROLL,18.50,29.99,95,PHX01
+INS-R19-BATT,R19 Fiberglass Insulation Batt,Insulation,R19 ceiling insulation batt roll,Owens Corning,ROLL,22.40,34.99,80,PHX01
+CON-80LB,80 lb Concrete Mix,Concrete,80 pound ready mix concrete bag,Quikrete,BAG,4.25,6.99,900,PHX01

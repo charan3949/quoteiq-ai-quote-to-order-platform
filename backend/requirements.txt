@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+pandas
+python-dotenv
+rapidfuzz
+reportlab
+pyjwt
+pwdlib[argon2]
+python-multipart
