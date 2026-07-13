@@ -1,20 +1,18 @@
 from datetime import datetime, timedelta, timezone
-from os import getenv
 
 import jwt
 from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db_models import UserRecord
 
 
-SECRET_KEY = getenv(
-    "QUOTEIQ_SECRET_KEY",
-    "change-this-secret-before-deployment"
+SECRET_KEY = settings.jwt_secret_key
+ALGORITHM = settings.jwt_algorithm
+ACCESS_TOKEN_EXPIRE_MINUTES = (
+    settings.access_token_expire_minutes
 )
-
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 password_hash = PasswordHash.recommended()
 
@@ -37,9 +35,13 @@ def get_user_by_email(
     database: Session,
     email: str
 ) -> UserRecord | None:
+    normalized_email = email.strip().lower()
+
     return (
         database.query(UserRecord)
-        .filter(UserRecord.email == email.lower())
+        .filter(
+            UserRecord.email == normalized_email
+        )
         .first()
     )
 
@@ -51,14 +53,29 @@ def create_user(
     password: str,
     role: str = "sales_rep"
 ) -> UserRecord:
-    existing = get_user_by_email(
+    normalized_email = email.strip().lower()
+    normalized_name = full_name.strip()
+    normalized_role = role.strip().lower()
+
+    if not normalized_email:
+        raise ValueError("Email is required")
+
+    if not normalized_name:
+        raise ValueError("Full name is required")
+
+    if len(password) < 8:
+        raise ValueError(
+            "Password must contain at least 8 characters"
+        )
+
+    existing_user = get_user_by_email(
         database,
-        email
+        normalized_email
     )
 
-    if existing:
+    if existing_user:
         raise ValueError(
-            f"User already exists: {email}"
+            f"User already exists: {normalized_email}"
         )
 
     allowed_roles = {
@@ -67,16 +84,16 @@ def create_user(
         "sales_rep"
     }
 
-    if role not in allowed_roles:
+    if normalized_role not in allowed_roles:
         raise ValueError(
-            f"Invalid role: {role}"
+            f"Invalid role: {normalized_role}"
         )
 
     user = UserRecord(
-        email=email.lower(),
-        full_name=full_name,
+        email=normalized_email,
+        full_name=normalized_name,
         hashed_password=hash_password(password),
-        role=role,
+        role=normalized_role,
         is_active=1
     )
 
@@ -123,10 +140,14 @@ def create_access_token(
         )
     )
 
+    issued_at = datetime.now(timezone.utc)
+
     payload = {
         "sub": subject,
         "role": role,
-        "exp": expires_at
+        "iat": issued_at,
+        "exp": expires_at,
+        "iss": settings.app_name
     }
 
     return jwt.encode(
@@ -143,7 +164,9 @@ def decode_access_token(
         return jwt.decode(
             token,
             SECRET_KEY,
-            algorithms=[ALGORITHM]
+            algorithms=[ALGORITHM],
+            issuer=settings.app_name
         )
+
     except jwt.PyJWTError:
         return None

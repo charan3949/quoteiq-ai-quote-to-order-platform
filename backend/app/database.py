@@ -1,27 +1,23 @@
-from pathlib import Path
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-
-BASE_DIR = Path(__file__).resolve().parents[1]
-DATABASE_PATH = BASE_DIR / "quoteiq.db"
-
-DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
+from app.config import settings
 
 
 engine = create_engine(
-    DATABASE_URL,
-    connect_args={
-        "check_same_thread": False
-    }
+    settings.database_url,
+    connect_args=(
+        {"check_same_thread": False}
+        if settings.database_url.startswith("sqlite")
+        else {}
+    ),
 )
 
 
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine
+    bind=engine,
 )
 
 
