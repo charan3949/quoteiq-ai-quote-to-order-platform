@@ -1,12 +1,15 @@
+import logging
+
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.database import Base, engine
 import app.db_models
-
+from app.config import settings
+from app.database import Base, engine
+from app.logging_config import configure_logging
+from app.models.audit import AuditLogRecord
 from app.models.schemas import (
-    RFQRequest,
-    RFQExtractionResponse,
     MatchLinesRequest,
     MatchLinesResponse,
     PriceQuoteRequest,
@@ -15,106 +18,145 @@ from app.models.schemas import (
     ProcessRFQResponse,
     QuoteApprovalRequest,
     QuoteRejectionRequest,
+    RFQExtractionResponse,
+    RFQRequest,
 )
-
+from app.routers.admin import router as admin_router
 from app.routers.auth import (
     get_current_user,
     require_roles,
     router as auth_router,
 )
-
+from app.services.audit_service import record_audit_event
 from app.services.data_loader import (
-    load_product_catalog,
     load_customers,
-    load_price_rules,
     load_margin_policies,
+    load_price_rules,
+    load_product_catalog,
 )
-
-from app.services.rfq_extractor import extract_rfq_lines
-from app.services.sku_matcher import match_lines_to_catalog
-from app.services.pricing_engine import price_quote
-from app.services.quote_package import build_quote_package
-from app.services.quote_pdf import generate_quote_pdf
-
-from app.services.quote_store import (
-    save_quote,
-    get_quote,
-    approve_quote,
-    reject_quote,
-)
-
 from app.services.order_service import (
     create_sales_order,
     get_sales_order,
 )
+from app.services.pricing_engine import price_quote
+from app.services.quote_package import build_quote_package
+from app.services.quote_pdf import generate_quote_pdf
+from app.services.quote_store import (
+    approve_quote,
+    get_quote,
+    reject_quote,
+    save_quote,
+)
+from app.services.rfq_extractor import extract_rfq_lines
+from app.services.sku_matcher import match_lines_to_catalog
 
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(
-    title="QuoteIQ API",
+    title=settings.app_name,
     description=(
         "AI-assisted quote-to-order platform "
         "for building materials distributors"
     ),
-    version="0.7.0"
+    version=settings.app_version,
+    debug=settings.debug,
+)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 
 
 @app.get("/")
 def root():
+    logger.info("Root health endpoint accessed")
+
     return {
         "message": "QuoteIQ API is running",
         "project": "AI Quote-to-Order Platform",
         "status": "healthy",
-        "database": "SQLite",
+        "database": (
+            "SQLite"
+            if settings.database_url.startswith("sqlite")
+            else "PostgreSQL"
+        ),
         "authentication": "JWT",
-        "authorization": "Role-Based Access Control"
+        "authorization": "Role-Based Access Control",
+        "environment": settings.environment,
+        "version": settings.app_version,
     }
 
 
 @app.get("/health")
 def health_check():
+    logger.info("Health check endpoint accessed")
+
     return {
         "status": "ok",
         "database": "connected",
-        "authentication": "enabled"
+        "authentication": "enabled",
+        "environment": settings.environment,
     }
 
 
 @app.get("/catalog")
 def get_catalog(
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
+    logger.info(
+        "Catalog requested by user %s",
+        current_user.email,
+    )
+
     catalog = load_product_catalog()
 
     return {
         "count": len(catalog),
         "products": catalog,
-        "requested_by": current_user.email
+        "requested_by": current_user.email,
     }
 
 
 @app.get("/customers")
 def get_customers(
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
+    logger.info(
+        "Customers requested by user %s",
+        current_user.email,
+    )
+
     customers = load_customers()
 
     return {
         "count": len(customers),
         "customers": customers,
-        "requested_by": current_user.email
+        "requested_by": current_user.email,
     }
 
 
 @app.post(
     "/rfqs/extract",
-    response_model=RFQExtractionResponse
+    response_model=RFQExtractionResponse,
 )
 def extract_rfq(
     request: RFQRequest,
@@ -122,23 +164,26 @@ def extract_rfq(
         require_roles(
             "sales_rep",
             "manager",
-            "admin"
+            "admin",
         )
-    )
+    ),
 ):
-    lines = extract_rfq_lines(
-        request.rfq_text
+    logger.info(
+        "RFQ extraction requested by user %s",
+        current_user.email,
     )
+
+    lines = extract_rfq_lines(request.rfq_text)
 
     return {
         "line_count": len(lines),
-        "lines": lines
+        "lines": lines,
     }
 
 
 @app.post(
     "/match-lines",
-    response_model=MatchLinesResponse
+    response_model=MatchLinesResponse,
 )
 def match_lines(
     request: MatchLinesRequest,
@@ -146,10 +191,15 @@ def match_lines(
         require_roles(
             "sales_rep",
             "manager",
-            "admin"
+            "admin",
         )
-    )
+    ),
 ):
+    logger.info(
+        "SKU matching requested by user %s",
+        current_user.email,
+    )
+
     catalog = load_product_catalog()
 
     raw_lines = [
@@ -159,18 +209,18 @@ def match_lines(
 
     matched_lines = match_lines_to_catalog(
         raw_lines,
-        catalog
+        catalog,
     )
 
     return {
         "match_count": len(matched_lines),
-        "matched_lines": matched_lines
+        "matched_lines": matched_lines,
     }
 
 
 @app.post(
     "/price-quote",
-    response_model=PriceQuoteResponse
+    response_model=PriceQuoteResponse,
 )
 def price_quote_endpoint(
     request: PriceQuoteRequest,
@@ -178,10 +228,16 @@ def price_quote_endpoint(
         require_roles(
             "sales_rep",
             "manager",
-            "admin"
+            "admin",
         )
-    )
+    ),
 ):
+    logger.info(
+        "Quote pricing requested by user %s for customer %s",
+        current_user.email,
+        request.customer_id,
+    )
+
     catalog = load_product_catalog()
     customers = load_customers()
     price_rules = load_price_rules()
@@ -192,21 +248,19 @@ def price_quote_endpoint(
         for line in request.matched_lines
     ]
 
-    priced_quote = price_quote(
+    return price_quote(
         customer_id=request.customer_id,
         matched_lines=raw_matched_lines,
         catalog=catalog,
         customers=customers,
         price_rules=price_rules,
-        margin_policies=margin_policies
+        margin_policies=margin_policies,
     )
-
-    return priced_quote
 
 
 @app.post(
     "/rfqs/process",
-    response_model=ProcessRFQResponse
+    response_model=ProcessRFQResponse,
 )
 def process_rfq(
     request: ProcessRFQRequest,
@@ -214,10 +268,16 @@ def process_rfq(
         require_roles(
             "sales_rep",
             "manager",
-            "admin"
+            "admin",
         )
-    )
+    ),
 ):
+    logger.info(
+        "RFQ processing requested by user %s for customer %s",
+        current_user.email,
+        request.customer_id,
+    )
+
     catalog = load_product_catalog()
     customers = load_customers()
     price_rules = load_price_rules()
@@ -229,7 +289,7 @@ def process_rfq(
 
     matched_lines = match_lines_to_catalog(
         extracted_lines,
-        catalog
+        catalog,
     )
 
     priced_quote = price_quote(
@@ -238,33 +298,23 @@ def process_rfq(
         catalog=catalog,
         customers=customers,
         price_rules=price_rules,
-        margin_policies=margin_policies
+        margin_policies=margin_policies,
     )
 
     return {
         "customer_id": priced_quote["customer_id"],
         "customer_name": priced_quote["customer_name"],
         "price_class": priced_quote["price_class"],
-        "extracted_line_count": len(
-            extracted_lines
-        ),
-        "matched_line_count": len(
-            matched_lines
-        ),
-        "quote_subtotal": priced_quote[
-            "subtotal"
-        ],
+        "extracted_line_count": len(extracted_lines),
+        "matched_line_count": len(matched_lines),
+        "quote_subtotal": priced_quote["subtotal"],
         "estimated_margin_pct": priced_quote[
             "estimated_margin_pct"
         ],
-        "risk_count": priced_quote[
-            "risk_count"
-        ],
+        "risk_count": priced_quote["risk_count"],
         "extracted_lines": extracted_lines,
         "matched_lines": matched_lines,
-        "priced_lines": priced_quote[
-            "priced_lines"
-        ]
+        "priced_lines": priced_quote["priced_lines"],
     }
 
 
@@ -275,10 +325,16 @@ def process_rfq_v2(
         require_roles(
             "sales_rep",
             "manager",
-            "admin"
+            "admin",
         )
-    )
+    ),
 ):
+    logger.info(
+        "RFQ process-v2 requested by user %s for customer %s",
+        current_user.email,
+        request.customer_id,
+    )
+
     catalog = load_product_catalog()
     customers = load_customers()
     price_rules = load_price_rules()
@@ -290,7 +346,7 @@ def process_rfq_v2(
 
     matched_lines = match_lines_to_catalog(
         extracted_lines,
-        catalog
+        catalog,
     )
 
     priced_quote = price_quote(
@@ -299,7 +355,7 @@ def process_rfq_v2(
         catalog=catalog,
         customers=customers,
         price_rules=price_rules,
-        margin_policies=margin_policies
+        margin_policies=margin_policies,
     )
 
     quote_package = build_quote_package(
@@ -307,34 +363,56 @@ def process_rfq_v2(
         rfq_text=request.rfq_text,
         extracted_lines=extracted_lines,
         matched_lines=matched_lines,
-        priced_quote=priced_quote
+        priced_quote=priced_quote,
     )
 
-    quote_package["created_by"] = (
-        current_user.email
-    )
+    quote_package["created_by"] = current_user.email
 
-    return save_quote(
+    saved_quote = save_quote(
         quote_package
     )
+
+    record_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="QUOTE_CREATED",
+        entity_type="QUOTE",
+        entity_id=saved_quote["quote_id"],
+        status="SUCCESS",
+        details={
+            "customer_id": saved_quote["customer_id"],
+            "customer_name": saved_quote["customer_name"],
+            "quote_subtotal": saved_quote["quote_subtotal"],
+            "risk_count": saved_quote["risk_count"],
+        },
+    )
+
+    logger.info(
+        "Quote %s created by user %s",
+        saved_quote.get("quote_id"),
+        current_user.email,
+    )
+
+    return saved_quote
 
 
 @app.get("/quotes/{quote_id}")
 def retrieve_quote(
     quote_id: str,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    quote = get_quote(
-        quote_id
+    logger.info(
+        "Quote %s requested by user %s",
+        quote_id,
+        current_user.email,
     )
+
+    quote = get_quote(quote_id)
 
     if quote is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"Quote not found: "
-                f"{quote_id}"
-            )
+            detail=f"Quote not found: {quote_id}",
         )
 
     return quote
@@ -347,50 +425,44 @@ def approve_quote_endpoint(
     current_user=Depends(
         require_roles(
             "manager",
-            "admin"
+            "admin",
         )
-    )
+    ),
 ):
     quote = approve_quote(
         quote_id=quote_id,
-        reviewed_by=request.reviewed_by
+        reviewed_by=request.reviewed_by,
     )
 
     if quote is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"Quote not found: "
-                f"{quote_id}"
-            )
+            detail=f"Quote not found: {quote_id}",
         )
 
+    record_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="QUOTE_APPROVED",
+        entity_type="QUOTE",
+        entity_id=quote_id,
+        status="SUCCESS",
+        details={
+            "approved_by": quote["approved_by"],
+            "quote_status": quote["quote_status"],
+        },
+    )
+
     return {
-        "message": (
-            "Quote approved successfully"
-        ),
+        "message": "Quote approved successfully",
         "quote_id": quote_id,
-        "quote_status": quote[
-            "quote_status"
-        ],
-        "approved_by": quote[
-            "approved_by"
-        ],
-        "approved_at": quote[
-            "approved_at"
-        ],
-        "authenticated_user": (
-            current_user.email
-        ),
-        "authenticated_role": (
-            current_user.role
-        ),
-        "erp_status": quote[
-            "erp_payload"
-        ]["status"],
-        "audit_trail": quote[
-            "audit_trail"
-        ]
+        "quote_status": quote["quote_status"],
+        "approved_by": quote["approved_by"],
+        "approved_at": quote["approved_at"],
+        "authenticated_user": current_user.email,
+        "authenticated_role": current_user.role,
+        "erp_status": quote["erp_payload"]["status"],
+        "audit_trail": quote["audit_trail"],
     }
 
 
@@ -401,180 +473,158 @@ def reject_quote_endpoint(
     current_user=Depends(
         require_roles(
             "manager",
-            "admin"
+            "admin",
         )
-    )
+    ),
 ):
     quote = reject_quote(
         quote_id=quote_id,
         reviewed_by=request.reviewed_by,
-        reason=request.reason
+        reason=request.reason,
     )
 
     if quote is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"Quote not found: "
-                f"{quote_id}"
-            )
+            detail=f"Quote not found: {quote_id}",
         )
 
+    record_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="QUOTE_REJECTED",
+        entity_type="QUOTE",
+        entity_id=quote_id,
+        status="SUCCESS",
+        details={
+            "rejected_by": quote["rejected_by"],
+            "reason": quote["rejection_reason"],
+        },
+    )
+
     return {
-        "message": (
-            "Quote rejected successfully"
-        ),
+        "message": "Quote rejected successfully",
         "quote_id": quote_id,
-        "quote_status": quote[
-            "quote_status"
-        ],
-        "rejected_by": quote[
-            "rejected_by"
-        ],
-        "rejected_at": quote[
-            "rejected_at"
-        ],
-        "rejection_reason": quote[
-            "rejection_reason"
-        ],
-        "authenticated_user": (
-            current_user.email
-        ),
-        "authenticated_role": (
-            current_user.role
-        ),
-        "erp_status": quote[
-            "erp_payload"
-        ]["status"],
-        "audit_trail": quote[
-            "audit_trail"
-        ]
+        "quote_status": quote["quote_status"],
+        "rejected_by": quote["rejected_by"],
+        "rejected_at": quote["rejected_at"],
+        "rejection_reason": quote["rejection_reason"],
+        "authenticated_user": current_user.email,
+        "authenticated_role": current_user.role,
+        "erp_status": quote["erp_payload"]["status"],
+        "audit_trail": quote["audit_trail"],
     }
 
 
 @app.get("/quotes/{quote_id}/pdf")
 def download_quote_pdf(
     quote_id: str,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    quote = get_quote(
-        quote_id
-    )
+    quote = get_quote(quote_id)
 
     if quote is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"Quote not found: "
-                f"{quote_id}"
-            )
+            detail=f"Quote not found: {quote_id}",
         )
 
-    if quote.get(
-        "quote_status"
-    ) not in {
+    if quote.get("quote_status") not in {
         "APPROVED",
-        "CONVERTED_TO_ORDER"
+        "CONVERTED_TO_ORDER",
     }:
         raise HTTPException(
             status_code=400,
             detail=(
                 "Quote must be approved "
                 "before generating a PDF"
-            )
+            ),
         )
 
-    pdf_path = generate_quote_pdf(
-        quote
+    pdf_path = generate_quote_pdf(quote)
+
+    record_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="QUOTE_PDF_GENERATED",
+        entity_type="QUOTE",
+        entity_id=quote_id,
+        status="SUCCESS",
     )
 
     return FileResponse(
         path=str(pdf_path),
         media_type="application/pdf",
-        filename=f"{quote_id}.pdf"
+        filename=f"{quote_id}.pdf",
     )
 
 
-@app.post(
-    "/quotes/{quote_id}/create-order"
-)
+@app.post("/quotes/{quote_id}/create-order")
 def create_order_endpoint(
     quote_id: str,
     current_user=Depends(
         require_roles(
             "manager",
-            "admin"
+            "admin",
         )
-    )
+    ),
 ):
-    quote = get_quote(
-        quote_id
-    )
+    quote = get_quote(quote_id)
 
     if quote is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"Quote not found: "
-                f"{quote_id}"
-            )
+            detail=f"Quote not found: {quote_id}",
         )
 
     try:
-        sales_order = create_sales_order(
-            quote
-        )
+        sales_order = create_sales_order(quote)
 
     except ValueError as error:
         raise HTTPException(
             status_code=400,
-            detail=str(error)
+            detail=str(error),
         ) from error
 
-    updated_quote = get_quote(
-        quote_id
+    updated_quote = get_quote(quote_id)
+
+    record_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="SALES_ORDER_CREATED",
+        entity_type="SALES_ORDER",
+        entity_id=sales_order["sales_order_id"],
+        status="SUCCESS",
+        details={
+            "source_quote_id": quote_id,
+            "order_total": sales_order["order_total"],
+        },
     )
 
     return {
-        "message": (
-            "Sales order created "
-            "successfully"
-        ),
+        "message": "Sales order created successfully",
         "sales_order": sales_order,
-        "created_by": (
-            current_user.email
-        ),
-        "created_by_role": (
-            current_user.role
-        ),
-        "quote_status": updated_quote[
-            "quote_status"
-        ],
+        "created_by": current_user.email,
+        "created_by_role": current_user.role,
+        "quote_status": updated_quote["quote_status"],
         "erp_status": updated_quote[
             "erp_payload"
         ]["status"],
-        "audit_trail": updated_quote[
-            "audit_trail"
-        ]
+        "audit_trail": updated_quote["audit_trail"],
     }
 
 
 @app.get("/orders/{order_id}")
 def retrieve_sales_order(
     order_id: str,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    sales_order = get_sales_order(
-        order_id
-    )
+    sales_order = get_sales_order(order_id)
 
     if sales_order is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"Sales order not found: "
-                f"{order_id}"
-            )
+            detail=f"Sales order not found: {order_id}",
         )
 
     return sales_order

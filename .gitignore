@@ -39,3 +39,19 @@ dist/
 # Generated output
 generated_quotes/
 backend/generated_quotes/
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Frontend environment variables
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+
+# Next.js deployment files
+frontend/.vercel/
+
+# Temporary exports
+*.xlsx
+*.pdf
