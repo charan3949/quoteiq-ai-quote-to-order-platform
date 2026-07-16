@@ -4,6 +4,11 @@ import { FormEvent, useState } from "react";
 import MetricCard from "../components/MetricCard";
 import DetailRow from "../components/DetailRow";
 import QuoteActions from "../components/QuoteActions";
+import ExecutiveDashboard from "../components/ExecutiveDashboard";
+import QuotesList from "../components/QuotesList";
+import EnterpriseViews from "../components/EnterpriseViews";
+import QuoteIntelligence from "../components/QuoteIntelligence";
+import AICopilot from "../components/AICopilot";
 
 import type {
   ActiveView,
@@ -20,6 +25,7 @@ export default function Home() {
   const [email, setEmail] = useState("sai@example.com");
   const [password, setPassword] = useState("QuoteIQ123!");
   const [token, setToken] = useState("");
+  const [role, setRole] = useState("");
   const [userMessage, setUserMessage] = useState("");
 
   const [customerId, setCustomerId] = useState("CUST-1001");
@@ -59,6 +65,17 @@ export default function Home() {
       setToken(data.access_token);
       setUserMessage("Login successful.");
       setActiveView("dashboard");
+
+      const meResponse = await fetch(`${API_URL}/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${data.access_token}`,
+        },
+      });
+
+      if (meResponse.ok) {
+        const me = await meResponse.json();
+        setRole(me.role || "");
+      }
     } catch (error) {
       setUserMessage(
         error instanceof Error ? error.message : "Login failed"
@@ -157,9 +174,16 @@ export default function Home() {
 
   function logout() {
     setToken("");
+    setRole("");
     setQuote(null);
     setAuditLogs([]);
     setUserMessage("Logged out.");
+    setActiveView("dashboard");
+  }
+
+  function openQuoteFromList(selectedQuote: Quote) {
+    setQuote(selectedQuote);
+    setUserMessage("");
     setActiveView("dashboard");
   }
 
@@ -299,6 +323,17 @@ export default function Home() {
             </button>
 
             <button
+              onClick={() => setActiveView("quotes")}
+              className={`w-full rounded-xl px-4 py-3 text-left ${
+                activeView === "quotes"
+                  ? "bg-blue-600"
+                  : "text-slate-300 hover:bg-slate-800"
+              }`}
+            >
+              Quotes
+            </button>
+
+            <button
               onClick={() => setActiveView("rfq")}
               className={`w-full rounded-xl px-4 py-3 text-left ${
                 activeView === "rfq"
@@ -307,6 +342,37 @@ export default function Home() {
               }`}
             >
               Process RFQ
+            </button>
+
+            {[
+              ["analytics", "Analytics"],
+              ["customers", "Customers"],
+              ["erp", "ERP Orders"],
+              ["revenue", "Revenue Reports"],
+              ["sales", "Sales Performance"],
+            ].map(([view, label]) => (
+              <button
+                key={view}
+                onClick={() => setActiveView(view as ActiveView)}
+                className={`w-full rounded-xl px-4 py-3 text-left ${
+                  activeView === view
+                    ? "bg-blue-600"
+                    : "text-slate-300 hover:bg-slate-800"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setActiveView("copilot")}
+              className={`w-full rounded-xl px-4 py-3 text-left ${
+                activeView === "copilot"
+                  ? "bg-blue-600"
+                  : "text-slate-300 hover:bg-slate-800"
+              }`}
+            >
+              AI Copilot
             </button>
 
             <button
@@ -346,8 +412,15 @@ export default function Home() {
 
                 <h2 className="text-2xl font-bold">
                   {activeView === "dashboard" && "Quote Dashboard"}
+                  {activeView === "quotes" && "All Quotes"}
                   {activeView === "rfq" && "Process Customer RFQ"}
                   {activeView === "audit" && "Enterprise Audit Log"}
+                  {activeView === "analytics" && "Analytics Center"}
+                  {activeView === "customers" && "Customer Management"}
+                  {activeView === "erp" && "ERP Orders"}
+                  {activeView === "revenue" && "Revenue Reports"}
+                  {activeView === "sales" && "Sales Performance"}
+                  {activeView === "copilot" && "AI Copilot"}
                 </h2>
               </div>
 
@@ -369,6 +442,21 @@ export default function Home() {
 
             {activeView === "dashboard" && (
               <>
+                <ExecutiveDashboard
+                  apiUrl={API_URL}
+                  token={token}
+                  role={role}
+                />
+
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Your latest quote
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    Most recent RFQ you processed in this session.
+                  </p>
+                </div>
+
                 <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
                   <MetricCard
                     label="Latest quote"
@@ -603,6 +691,13 @@ export default function Home() {
                   </div>
                 )}
                 {quote && (
+                  <QuoteIntelligence
+                    apiUrl={API_URL}
+                    token={token}
+                    quoteId={quote.quote_id}
+                  />
+                )}
+                {quote && (
     <QuoteActions
     quote={quote}
     token={token}
@@ -614,6 +709,23 @@ export default function Home() {
   />
 )}
               </>
+            )}
+
+            {(["analytics", "customers", "erp", "revenue", "sales"] as ActiveView[]).includes(activeView) && (
+              <EnterpriseViews
+                apiUrl={API_URL}
+                token={token}
+                view={activeView as "analytics" | "customers" | "erp" | "revenue" | "sales"}
+              />
+            )}
+
+            {activeView === "quotes" && (
+              <QuotesList
+                apiUrl={API_URL}
+                token={token}
+                role={role}
+                onSelectQuote={openQuoteFromList}
+              />
             )}
 
             {activeView === "rfq" && (
@@ -685,6 +797,14 @@ export default function Home() {
                   </button>
                 </div>
               </form>
+            )}
+
+            {activeView === "copilot" && (
+              <AICopilot
+                apiUrl={API_URL}
+                token={token}
+                quoteId={quote?.quote_id}
+              />
             )}
 
             {activeView === "audit" && (

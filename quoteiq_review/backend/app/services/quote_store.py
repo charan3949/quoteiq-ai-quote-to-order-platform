@@ -51,7 +51,6 @@ def _record_to_dict(record: QuoteRecord) -> dict:
         ),
         "rejection_reason": record.rejection_reason,
         "sales_order_id": record.sales_order_id,
-        "created_by": record.created_by,
         "created_at": (
             record.created_at.isoformat()
             if record.created_at
@@ -68,11 +67,6 @@ def _record_to_dict(record: QuoteRecord) -> dict:
 
 
 def save_quote(quote: dict) -> dict:
-    if not quote.get("created_by"):
-        raise ValueError(
-            "created_by is required: every quote must have an owner"
-        )
-
     database = SessionLocal()
 
     try:
@@ -141,8 +135,7 @@ def save_quote(quote: dict) -> dict:
             audit_trail=quote.get(
                 "audit_trail",
                 []
-            ),
-            created_by=quote.get("created_by")
+            )
         )
 
         database.add(record)
@@ -268,83 +261,6 @@ def reject_quote(
         database.refresh(record)
 
         return _record_to_dict(record)
-
-    finally:
-        database.close()
-
-
-def list_quotes(
-    skip: int = 0,
-    limit: int = 50,
-    status: str | None = None,
-    customer_id: str | None = None,
-    created_by: str | None = None,
-    search: str | None = None,
-) -> tuple[list[dict], int]:
-    """Return a page of quotes plus the total matching count.
-
-    Used by the quotes list view and by any UI that needs a
-    filtered, paginated set of quotes (dashboard drill-downs,
-    approval center, customer history, etc).
-    """
-    database = SessionLocal()
-
-    try:
-        query = database.query(QuoteRecord)
-
-        if status:
-            query = query.filter(QuoteRecord.quote_status == status)
-
-        if customer_id:
-            query = query.filter(
-                QuoteRecord.customer_id == customer_id
-            )
-
-        if created_by:
-            query = query.filter(
-                QuoteRecord.created_by == created_by
-            )
-
-        if search:
-            like_term = f"%{search}%"
-            query = query.filter(
-                (QuoteRecord.quote_id.ilike(like_term))
-                | (QuoteRecord.customer_name.ilike(like_term))
-                | (QuoteRecord.customer_id.ilike(like_term))
-                | (QuoteRecord.created_by.ilike(like_term))
-                | (QuoteRecord.sales_order_id.ilike(like_term))
-            )
-
-        total = query.count()
-
-        records = (
-            query.order_by(QuoteRecord.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
-
-        return [_record_to_dict(r) for r in records], total
-
-    finally:
-        database.close()
-
-
-def list_all_quotes_raw() -> list[QuoteRecord]:
-    """Return every quote record for analytics aggregation.
-
-    Kept separate from list_quotes (which is paginated and
-    API-facing) since analytics needs the full set to compute
-    accurate totals, trends, and leaderboards.
-    """
-    database = SessionLocal()
-
-    try:
-        return (
-            database.query(QuoteRecord)
-            .order_by(QuoteRecord.created_at.asc())
-            .all()
-        )
 
     finally:
         database.close()

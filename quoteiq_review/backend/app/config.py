@@ -17,10 +17,6 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
-    openai_api_key: str | None = None
-    openai_model: str = "gpt-4.1-mini"
-    openai_base_url: str = "https://api.openai.com/v1"
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

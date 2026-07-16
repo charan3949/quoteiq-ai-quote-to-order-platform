@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional
 
 
@@ -122,28 +122,3 @@ class CurrentUserResponse(BaseModel):
     email: str
     full_name: str
     role: str
-
-class CopilotMessage(BaseModel):
-    role: str
-    content: str
-
-
-class CopilotRequest(BaseModel):
-    message: str
-    quote_id: Optional[str] = None
-    history: List[CopilotMessage] = Field(default_factory=list)
-
-
-class CopilotUsage(BaseModel):
-    input_tokens: Optional[int] = None
-    output_tokens: Optional[int] = None
-    total_tokens: Optional[int] = None
-
-
-class CopilotResponse(BaseModel):
-    answer: str
-    quote_id: Optional[str] = None
-    model: str
-    usage: CopilotUsage
-    grounded: bool
-    disclaimer: str

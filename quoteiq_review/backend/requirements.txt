@@ -10,4 +10,3 @@ pwdlib[argon2]
 python-multipart
 pydantic-settings
 sqlalchemy
-httpx

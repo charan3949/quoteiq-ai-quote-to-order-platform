@@ -22,8 +22,6 @@ from app.models.schemas import (
     RFQRequest,
 )
 from app.routers.admin import router as admin_router
-from app.routers.analytics import router as analytics_router
-from app.routers.enterprise import router as enterprise_router
 from app.routers.auth import (
     get_current_user,
     require_roles,
@@ -46,7 +44,6 @@ from app.services.quote_pdf import generate_quote_pdf
 from app.services.quote_store import (
     approve_quote,
     get_quote,
-    list_quotes,
     reject_quote,
     save_quote,
 )
@@ -76,10 +73,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:3001",
-        "http://localhost:3002",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
-        "http://127.0.0.1:3002",
         "https://quoteiq-ai-quote-to-order-platform.vercel.app",
         "https://quoteiq-ai-quote-to-order-platf-git-bd9b21-charan3949s-projects.vercel.app",
     ],
@@ -90,8 +85,6 @@ app.add_middleware(
 )
 app.include_router(auth_router)
 app.include_router(admin_router)
-app.include_router(analytics_router)
-app.include_router(enterprise_router)
 
 
 @app.get("/")
@@ -376,15 +369,9 @@ def process_rfq_v2(
 
     quote_package["created_by"] = current_user.email
 
-    try:
-        saved_quote = save_quote(
-            quote_package
-        )
-    except ValueError as error:
-        raise HTTPException(
-            status_code=400,
-            detail=str(error),
-        ) from error
+    saved_quote = save_quote(
+        quote_package
+    )
 
     record_audit_event(
         actor_email=current_user.email,
@@ -410,48 +397,6 @@ def process_rfq_v2(
     return saved_quote
 
 
-@app.get("/quotes")
-def list_quotes_endpoint(
-    skip: int = 0,
-    limit: int = 50,
-    status: str | None = None,
-    customer_id: str | None = None,
-    created_by: str | None = None,
-    search: str | None = None,
-    current_user=Depends(get_current_user),
-):
-    logger.info(
-        "Quote list requested by user %s",
-        current_user.email,
-    )
-
-    # RBAC: sales reps can only ever see their own quotes.
-    # A sales_rep-supplied created_by is ignored outright rather
-    # than validated, so there is no path where a crafted query
-    # param widens visibility beyond the caller's own quotes.
-    if current_user.role == "sales_rep":
-        effective_created_by = current_user.email
-    else:
-        effective_created_by = created_by
-
-    quotes, total = list_quotes(
-        skip=skip,
-        limit=limit,
-        status=status,
-        customer_id=customer_id,
-        created_by=effective_created_by,
-        search=search,
-    )
-
-    return {
-        "count": len(quotes),
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-        "quotes": quotes,
-    }
-
-
 @app.get("/quotes/{quote_id}")
 def retrieve_quote(
     quote_id: str,
@@ -466,15 +411,6 @@ def retrieve_quote(
     quote = get_quote(quote_id)
 
     if quote is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Quote not found: {quote_id}",
-        )
-
-    if (
-        current_user.role == "sales_rep"
-        and quote.get("created_by") != current_user.email
-    ):
         raise HTTPException(
             status_code=404,
             detail=f"Quote not found: {quote_id}",
@@ -589,15 +525,6 @@ def download_quote_pdf(
     quote = get_quote(quote_id)
 
     if quote is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Quote not found: {quote_id}",
-        )
-
-    if (
-        current_user.role == "sales_rep"
-        and quote.get("created_by") != current_user.email
-    ):
         raise HTTPException(
             status_code=404,
             detail=f"Quote not found: {quote_id}",

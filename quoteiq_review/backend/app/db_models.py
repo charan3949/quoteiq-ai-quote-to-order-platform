@@ -52,8 +52,6 @@ class QuoteRecord(Base):
 
     sales_order_id = Column(String(50), nullable=True)
 
-    created_by = Column(String(255), nullable=True, index=True)
-
     created_at = Column(
         DateTime,
         nullable=False,

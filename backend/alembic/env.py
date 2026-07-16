@@ -12,7 +12,8 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(BASE_DIR))
 
 
-from app.database import Base, DATABASE_URL
+from app.database import Base
+from app.config import settings
 import app.db_models
 
 
@@ -20,7 +21,7 @@ config = context.config
 
 config.set_main_option(
     "sqlalchemy.url",
-    DATABASE_URL
+    settings.database_url
 )
 
 if config.config_file_name is not None:
