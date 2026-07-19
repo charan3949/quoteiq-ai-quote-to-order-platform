@@ -11,3 +11,7 @@ python-multipart
 pydantic-settings
 sqlalchemy
 httpx
+psycopg2-binary
+alembic
+pypdf
+openpyxl
