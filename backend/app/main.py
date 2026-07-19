@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 
 import app.db_models
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, SessionLocal, engine
 from app.logging_config import configure_logging
 from app.models.audit import AuditLogRecord
 from app.models.schemas import (
@@ -52,12 +52,18 @@ from app.services.quote_store import (
 )
 from app.services.rfq_extractor import extract_rfq_lines
 from app.services.sku_matcher import match_lines_to_catalog
+from app.seed import seed_demo_users
 
 
 configure_logging()
 logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
+_seed_session = SessionLocal()
+try:
+    seed_demo_users(_seed_session)
+finally:
+    _seed_session.close()
 
 
 app = FastAPI(
