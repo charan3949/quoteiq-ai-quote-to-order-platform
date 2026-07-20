@@ -6,10 +6,21 @@ class RFQRequest(BaseModel):
     rfq_text: str
 
 
+class RFQUploadResponse(BaseModel):
+    filename: str
+    rfq_text: str
+    character_count: int
+
+
 class ExtractedLineItem(BaseModel):
     description_raw: str
     quantity: float
     uom_raw: Optional[str] = None
+    customer_part_number: Optional[str] = None
+    requirements: Optional[str] = None
+    confidence: Optional[str] = None
+    needs_review: Optional[bool] = None
+    extraction_method: Optional[str] = None
 
 
 class RFQExtractionResponse(BaseModel):

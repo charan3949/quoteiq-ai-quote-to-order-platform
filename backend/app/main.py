@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -20,6 +20,7 @@ from app.models.schemas import (
     QuoteRejectionRequest,
     RFQExtractionResponse,
     RFQRequest,
+    RFQUploadResponse,
 )
 from app.routers.admin import router as admin_router
 from app.routers.analytics import router as analytics_router
@@ -43,6 +44,7 @@ from app.services.order_service import (
 from app.services.pricing_engine import price_quote
 from app.services.quote_package import build_quote_package
 from app.services.quote_pdf import generate_quote_pdf
+from app.services.quote_excel import generate_quote_excel
 from app.services.quote_store import (
     approve_quote,
     get_quote,
@@ -50,7 +52,8 @@ from app.services.quote_store import (
     reject_quote,
     save_quote,
 )
-from app.services.rfq_extractor import extract_rfq_lines
+from app.services.ai_rfq_extractor import extract_rfq_lines_ai
+from app.services.rfq_upload import RFQUploadError, extract_text_from_upload
 from app.services.sku_matcher import match_lines_to_catalog
 from app.seed import seed_demo_users
 
@@ -59,6 +62,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
+
 _seed_session = SessionLocal()
 try:
     seed_demo_users(_seed_session)
@@ -169,6 +173,60 @@ def get_customers(
 
 
 @app.post(
+    "/rfqs/upload",
+    response_model=RFQUploadResponse,
+)
+async def upload_rfq(
+    file: UploadFile = File(...),
+    current_user=Depends(
+        require_roles(
+            "sales_rep",
+            "manager",
+            "admin",
+        )
+    ),
+):
+    logger.info(
+        "RFQ file upload by user %s: %s",
+        current_user.email,
+        file.filename,
+    )
+
+    try:
+        rfq_text = await extract_text_from_upload(file)
+    except RFQUploadError as error:
+        record_audit_event(
+            actor_email=current_user.email,
+            actor_role=current_user.role,
+            action="RFQ_UPLOAD_REJECTED",
+            entity_type="RFQ_FILE",
+            entity_id=file.filename or "unknown",
+            status="FAILURE",
+            details={"reason": str(error)},
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        ) from error
+
+    record_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="RFQ_UPLOADED",
+        entity_type="RFQ_FILE",
+        entity_id=file.filename or "unknown",
+        status="SUCCESS",
+        details={"character_count": len(rfq_text)},
+    )
+
+    return {
+        "filename": file.filename or "unknown",
+        "rfq_text": rfq_text,
+        "character_count": len(rfq_text),
+    }
+
+
+@app.post(
     "/rfqs/extract",
     response_model=RFQExtractionResponse,
 )
@@ -187,7 +245,7 @@ def extract_rfq(
         current_user.email,
     )
 
-    lines = extract_rfq_lines(request.rfq_text)
+    lines = extract_rfq_lines_ai(request.rfq_text)
 
     return {
         "line_count": len(lines),
@@ -297,7 +355,7 @@ def process_rfq(
     price_rules = load_price_rules()
     margin_policies = load_margin_policies()
 
-    extracted_lines = extract_rfq_lines(
+    extracted_lines = extract_rfq_lines_ai(
         request.rfq_text
     )
 
@@ -354,7 +412,7 @@ def process_rfq_v2(
     price_rules = load_price_rules()
     margin_policies = load_margin_policies()
 
-    extracted_lines = extract_rfq_lines(
+    extracted_lines = extract_rfq_lines_ai(
         request.rfq_text
     )
 
@@ -636,6 +694,58 @@ def download_quote_pdf(
         path=str(pdf_path),
         media_type="application/pdf",
         filename=f"{quote_id}.pdf",
+    )
+
+
+@app.get("/quotes/{quote_id}/excel")
+def download_quote_excel(
+    quote_id: str,
+    current_user=Depends(get_current_user),
+):
+    quote = get_quote(quote_id)
+
+    if quote is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Quote not found: {quote_id}",
+        )
+
+    if (
+        current_user.role == "sales_rep"
+        and quote.get("created_by") != current_user.email
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Quote not found: {quote_id}",
+        )
+
+    if quote.get("quote_status") not in {
+        "APPROVED",
+        "CONVERTED_TO_ORDER",
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Quote must be approved "
+                "before generating an Excel export"
+            ),
+        )
+
+    excel_path = generate_quote_excel(quote)
+
+    record_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="QUOTE_EXCEL_GENERATED",
+        entity_type="QUOTE",
+        entity_id=quote_id,
+        status="SUCCESS",
+    )
+
+    return FileResponse(
+        path=str(excel_path),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=f"{quote_id}.xlsx",
     )
 
 
