@@ -85,6 +85,50 @@ export default function Home() {
     }
   }
 
+  async function uploadRfqFile(file: File) {
+    if (!token) {
+      setUserMessage("Please log in first.");
+      return;
+    }
+
+    setLoading(true);
+    setUserMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`${API_URL}/rfqs/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : "File upload failed"
+        );
+      }
+
+      setRfqText(data.rfq_text);
+      setUserMessage(
+        `Extracted ${data.character_count} characters from ${data.filename}. Review below, then click Generate Quote.`
+      );
+    } catch (error) {
+      setUserMessage(
+        error instanceof Error ? error.message : "File upload failed"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function processRfq(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -771,6 +815,30 @@ export default function Home() {
 
                 <label className="mt-6 block">
                   <span className="mb-2 block text-sm font-semibold">
+                    Upload RFQ file (.pdf, .txt, .csv — max 2MB)
+                  </span>
+
+                  <input
+                    type="file"
+                    accept=".pdf,.txt,.csv"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        uploadRfqFile(file);
+                      }
+                      event.target.value = "";
+                    }}
+                    disabled={loading}
+                    className="w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-500"
+                  />
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    Or paste the RFQ text directly below.
+                  </p>
+                </label>
+
+                <label className="mt-6 block">
+                  <span className="mb-2 block text-sm font-semibold">
                     RFQ text
                   </span>
 
@@ -888,4 +956,3 @@ export default function Home() {
     </main>
   );
 }
-
