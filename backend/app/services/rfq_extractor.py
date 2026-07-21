@@ -1,4 +1,4 @@
-import re
+﻿import re
 
 
 def extract_rfq_lines(rfq_text: str):
@@ -9,6 +9,8 @@ def extract_rfq_lines(rfq_text: str):
 
         if not cleaned:
             continue
+
+        cleaned = re.sub(r"^[-*•]\s*", "", cleaned)
 
         match = re.match(
             r"^(?P<quantity>\d+(?:\.\d+)?)\s+(?P<uom>\w+)?\s*(?P<description>.+)$",
