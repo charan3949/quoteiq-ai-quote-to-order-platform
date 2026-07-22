@@ -1,4 +1,4 @@
-import math
+﻿import math
 
 
 def _is_blank(value) -> bool:
@@ -213,13 +213,39 @@ def price_quote(
     risk_count = 0
 
     for line in matched_lines:
+        quantity = _safe_float(
+            line.get("quantity")
+        )
+
+        if line.get("matched_sku") is None:
+            risk_count += 1
+
+            priced_lines.append({
+                "description_raw": line["description_raw"],
+                "quantity": quantity,
+                "uom_raw": line.get("uom_raw"),
+                "sku": None,
+                "product_name": "UNMATCHED - manual review required",
+                "category": None,
+                "base_cost": 0.0,
+                "list_price": 0.0,
+                "unit_price": 0.0,
+                "line_total": 0.0,
+                "margin_pct": 0.0,
+                "pricing_rule_applied": "unmatched",
+                "risk_flag": True,
+                "risk_reason": (
+                    "No confident catalog match was found for this "
+                    "line. A team member must manually select the "
+                    "correct SKU before this line can be priced."
+                )
+            })
+
+            continue
+
         product = _find_product(
             line["matched_sku"],
             catalog
-        )
-
-        quantity = _safe_float(
-            line.get("quantity")
         )
 
         base_cost = _safe_float(

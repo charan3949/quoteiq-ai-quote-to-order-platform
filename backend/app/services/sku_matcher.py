@@ -1,4 +1,4 @@
-from rapidfuzz import fuzz
+﻿from rapidfuzz import fuzz
 
 
 def _build_search_text(product: dict) -> str:
@@ -17,6 +17,9 @@ def _confidence_label(score: float) -> str:
     if score >= 65:
         return "medium"
     return "low"
+
+
+MINIMUM_MATCH_SCORE = 55
 
 
 def match_line_to_catalog(line: dict, catalog: list[dict]) -> dict:
@@ -38,9 +41,21 @@ def match_line_to_catalog(line: dict, catalog: list[dict]) -> dict:
             best_score = score
             best_product = product
 
+    if best_product is None or best_score < MINIMUM_MATCH_SCORE:
+        return {
+            "description_raw": line["description_raw"],
+            "quantity": line.get("quantity"),
+            "uom_raw": line.get("uom_raw"),
+            "matched_sku": None,
+            "matched_product_name": None,
+            "matched_category": None,
+            "match_score": round(float(best_score), 2) if best_product else 0.0,
+            "match_confidence": "unmatched"
+        }
+
     return {
         "description_raw": line["description_raw"],
-        "quantity": line["quantity"],
+        "quantity": line.get("quantity"),
         "uom_raw": line.get("uom_raw"),
         "matched_sku": best_product["sku"],
         "matched_product_name": best_product["product_name"],
