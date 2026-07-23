@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 
 from app.database import SessionLocal
 from app.db_models import QuoteRecord
@@ -16,12 +16,41 @@ def _parse_datetime(value):
     )
 
 
+def _build_pricing_status_message(
+    unresolved_count: int,
+    total_line_count: int
+) -> str | None:
+    if total_line_count == 0:
+        return (
+            "No line items could be extracted from this RFQ. "
+            "Manual review required before this quote can be approved."
+        )
+
+    if unresolved_count == 0:
+        return None
+
+    return (
+        f"{unresolved_count} of {total_line_count} line item"
+        f"{'s' if total_line_count != 1 else ''} require review. "
+        f"Quote total reflects only the resolved line items until "
+        f"pricing is completed for the rest."
+    )
+
+
 def _record_to_dict(record: QuoteRecord) -> dict:
+    priced_lines = record.priced_lines or []
+    unresolved_line_count = _count_unresolved_lines(priced_lines)
+
     quote = {
         "quote_id": record.quote_id,
         "quote_status": record.quote_status,
         "review_required": bool(record.review_required),
         "quote_confidence": record.quote_confidence,
+        "unresolved_line_count": unresolved_line_count,
+        "pricing_status_message": _build_pricing_status_message(
+            unresolved_count=unresolved_line_count,
+            total_line_count=len(priced_lines)
+        ),
         "customer_id": record.customer_id,
         "customer_name": record.customer_name,
         "price_class": record.price_class,
@@ -176,6 +205,17 @@ def get_quote(quote_id: str) -> dict | None:
         database.close()
 
 
+def _count_unresolved_lines(priced_lines: list[dict] | None) -> int:
+    if not priced_lines:
+        return 0
+
+    return sum(
+        1
+        for line in priced_lines
+        if line.get("sku") is None
+    )
+
+
 def approve_quote(
     quote_id: str,
     reviewed_by: str
@@ -193,6 +233,23 @@ def approve_quote(
 
         if record is None:
             return None
+
+        priced_lines = record.priced_lines or []
+        unresolved_count = _count_unresolved_lines(priced_lines)
+
+        if len(priced_lines) == 0:
+            raise ValueError(
+                "Cannot approve: no line items were extracted from "
+                "this RFQ. This quote cannot be approved as-is."
+            )
+
+        if unresolved_count > 0:
+            raise ValueError(
+                f"Cannot approve: {unresolved_count} of "
+                f"{len(priced_lines)} line item(s) have "
+                f"no matched SKU or valid price. Resolve pricing for "
+                f"these lines manually before approving this quote."
+            )
 
         timestamp = datetime.now(timezone.utc)
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+﻿from pydantic import BaseModel, Field
 from typing import List, Optional
 
 
@@ -10,6 +10,10 @@ class RFQUploadResponse(BaseModel):
     filename: str
     rfq_text: str
     character_count: int
+    suggested_customer_id: Optional[str] = None
+    suggested_customer_name: Optional[str] = None
+    suggested_customer_match_score: Optional[float] = None
+    is_new_customer: Optional[bool] = None
 
 
 class ExtractedLineItem(BaseModel):
@@ -79,6 +83,8 @@ class PriceQuoteResponse(BaseModel):
     estimated_margin_pct: float
     risk_count: int
     priced_lines: List[PricedLineItem]
+
+
 class ProcessRFQRequest(BaseModel):
     customer_id: str
     rfq_text: str
@@ -96,6 +102,8 @@ class ProcessRFQResponse(BaseModel):
     extracted_lines: List[ExtractedLineItem]
     matched_lines: List[MatchedLineItem]
     priced_lines: List[PricedLineItem]
+
+
 class QuoteApprovalRequest(BaseModel):
     reviewed_by: str
 
@@ -103,6 +111,8 @@ class QuoteApprovalRequest(BaseModel):
 class QuoteRejectionRequest(BaseModel):
     reviewed_by: str
     reason: str
+
+
 class UserRegisterRequest(BaseModel):
     email: str
     full_name: str
@@ -133,6 +143,7 @@ class CurrentUserResponse(BaseModel):
     email: str
     full_name: str
     role: str
+
 
 class CopilotMessage(BaseModel):
     role: str

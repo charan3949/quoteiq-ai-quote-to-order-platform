@@ -53,6 +53,7 @@ from app.services.quote_store import (
     save_quote,
 )
 from app.services.ai_rfq_extractor import extract_rfq_lines_ai
+from app.services.customer_matcher import suggest_or_create_customer
 from app.services.rfq_upload import RFQUploadError, extract_text_from_upload
 from app.services.sku_matcher import match_lines_to_catalog
 from app.seed import seed_demo_users
@@ -219,10 +220,33 @@ async def upload_rfq(
         details={"character_count": len(rfq_text)},
     )
 
+    customer_suggestion = suggest_or_create_customer(
+        rfq_text,
+        load_customers(),
+    )
+
+    if customer_suggestion["is_new_customer"]:
+        record_audit_event(
+            actor_email=current_user.email,
+            actor_role=current_user.role,
+            action="CUSTOMER_AUTO_CREATED",
+            entity_type="CUSTOMER",
+            entity_id=customer_suggestion["customer_id"],
+            status="SUCCESS",
+            details={
+                "customer_name": customer_suggestion["customer_name"],
+                "source": "rfq_text_detection",
+            },
+        )
+
     return {
         "filename": file.filename or "unknown",
         "rfq_text": rfq_text,
         "character_count": len(rfq_text),
+        "suggested_customer_id": customer_suggestion["customer_id"],
+        "suggested_customer_name": customer_suggestion["customer_name"],
+        "suggested_customer_match_score": customer_suggestion["match_score"],
+        "is_new_customer": customer_suggestion["is_new_customer"],
     }
 
 
@@ -558,10 +582,16 @@ def approve_quote_endpoint(
         )
     ),
 ):
-    quote = approve_quote(
-        quote_id=quote_id,
-        reviewed_by=request.reviewed_by,
-    )
+    try:
+        quote = approve_quote(
+            quote_id=quote_id,
+            reviewed_by=request.reviewed_by,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        ) from error
 
     if quote is None:
         raise HTTPException(

@@ -29,6 +29,7 @@ export default function Home() {
   const [userMessage, setUserMessage] = useState("");
 
   const [customerId, setCustomerId] = useState("CUST-1001");
+  const [dynamicCustomers, setDynamicCustomers] = useState<{ id: string; name: string }[]>([]);
   const [rfqText, setRfqText] = useState(
     "25 pcs 2x4x8 SPF Stud\n40 sheets 1/2 inch drywall\n12 pcs 7/16 OSB 4x8"
   );
@@ -117,9 +118,35 @@ export default function Home() {
       }
 
       setRfqText(data.rfq_text);
-      setUserMessage(
-        `Extracted ${data.character_count} characters from ${data.filename}. Review below, then click Generate Quote.`
-      );
+
+      if (data.suggested_customer_id && data.is_new_customer) {
+        setCustomerId(data.suggested_customer_id);
+        setDynamicCustomers((previous) => {
+          const alreadyKnown = previous.some(
+            (customer) => customer.id === data.suggested_customer_id
+          );
+          if (alreadyKnown) return previous;
+          return [
+            ...previous,
+            {
+              id: data.suggested_customer_id,
+              name: data.suggested_customer_name,
+            },
+          ];
+        });
+        setUserMessage(
+          `Extracted ${data.character_count} characters from ${data.filename}. This looks like a new customer — added "${data.suggested_customer_name}" (${data.suggested_customer_id}) to the system and selected it below. Verify before generating the quote.`
+        );
+      } else if (data.suggested_customer_id) {
+        setCustomerId(data.suggested_customer_id);
+        setUserMessage(
+          `Extracted ${data.character_count} characters from ${data.filename}. Detected customer: ${data.suggested_customer_name} (auto-selected below — verify before generating the quote).`
+        );
+      } else {
+        setUserMessage(
+          `Extracted ${data.character_count} characters from ${data.filename}. Could not confidently detect the customer from this text — please select it manually below.`
+        );
+      }
     } catch (error) {
       setUserMessage(
         error instanceof Error ? error.message : "File upload failed"
@@ -807,9 +834,20 @@ export default function Home() {
                     <option value="CUST-1002">
                       CUST-1002 — Desert Ridge Builders
                     </option>
+                    <option value="CUST-1003">
+                      CUST-1003 — Mesa Renovation Group
+                    </option>
                     <option value="CUST-1004">
                       CUST-1004 — Sun Valley Framing
                     </option>
+                    <option value="CUST-1005">
+                      CUST-1005 — Cactus Commercial Builds
+                    </option>
+                    {dynamicCustomers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.id} — {customer.name} (new)
+                      </option>
+                    ))}
                   </select>
                 </label>
 

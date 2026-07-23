@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from uuid import uuid4
 
 
@@ -107,6 +107,35 @@ def _build_erp_payload(
     }
 
 
+def _count_unresolved_lines(priced_lines: list[dict]) -> int:
+    return sum(
+        1
+        for line in priced_lines
+        if line.get("sku") is None
+    )
+
+
+def _build_pricing_status_message(
+    unresolved_count: int,
+    total_line_count: int
+) -> str | None:
+    if total_line_count == 0:
+        return (
+            "No line items could be extracted from this RFQ. "
+            "Manual review required before this quote can be approved."
+        )
+
+    if unresolved_count == 0:
+        return None
+
+    return (
+        f"{unresolved_count} of {total_line_count} line item"
+        f"{'s' if total_line_count != 1 else ''} require review. "
+        f"Quote total reflects only the resolved line items until "
+        f"pricing is completed for the rest."
+    )
+
+
 def build_quote_package(
     customer_id: str,
     rfq_text: str,
@@ -117,6 +146,15 @@ def build_quote_package(
     quote_id = f"QIQ-{uuid4().hex[:8].upper()}"
     timestamp = datetime.now(timezone.utc).isoformat()
 
+    unresolved_line_count = _count_unresolved_lines(
+        priced_quote["priced_lines"]
+    )
+
+    pricing_status_message = _build_pricing_status_message(
+        unresolved_count=unresolved_line_count,
+        total_line_count=len(priced_quote["priced_lines"])
+    )
+
     quote_confidence = _calculate_quote_confidence(
         matched_lines=matched_lines,
         risk_count=priced_quote["risk_count"]
@@ -125,6 +163,8 @@ def build_quote_package(
     review_required = (
         priced_quote["risk_count"] > 0
         or quote_confidence < 85
+        or unresolved_line_count > 0
+        or len(priced_quote["priced_lines"]) == 0
     )
 
     quote_status = (
@@ -179,6 +219,8 @@ def build_quote_package(
         "quote_status": quote_status,
         "review_required": review_required,
         "quote_confidence": quote_confidence,
+        "unresolved_line_count": unresolved_line_count,
+        "pricing_status_message": pricing_status_message,
         "customer_id": priced_quote["customer_id"],
         "customer_name": priced_quote["customer_name"],
         "price_class": priced_quote["price_class"],

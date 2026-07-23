@@ -420,6 +420,13 @@ export default function QuoteActions({
         </span>
       </div>
 
+      {quote.pricing_status_message && (
+        <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <span className="font-semibold">Pricing incomplete: </span>
+          {quote.pricing_status_message}
+        </div>
+      )}
+
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <button
           type="button"

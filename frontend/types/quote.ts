@@ -1,4 +1,4 @@
-export type PricedLine = {
+﻿export type PricedLine = {
   description_raw: string;
   quantity: number;
   uom_raw: string | null;
@@ -29,6 +29,8 @@ export type Quote = {
   matched_line_count: number;
   priced_lines: PricedLine[];
   review_required?: boolean;
+  unresolved_line_count?: number;
+  pricing_status_message?: string | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -115,6 +117,7 @@ export type Bottlenecks = {
   revenue_at_risk: number;
   oldest_pending: PendingQuoteSummary[];
 };
+
 export type CustomerPortfolio = {
   customer_id: string;
   customer_name: string;
