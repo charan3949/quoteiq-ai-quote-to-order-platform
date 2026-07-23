@@ -34,6 +34,17 @@ def suggest_customer(rfq_text: str, customers: list[dict]) -> dict | None:
     suggests it if found with high confidence. Returns None if no
     confident match is found — callers should treat that as "let the
     user pick manually," not as an error.
+
+    Matching strategy (in order):
+    1. Exact, case-insensitive substring containment — the strongest,
+       safest signal. If "Desert Ridge Builders" literally appears in
+       the text, that's a real match.
+    2. A strict whole-string similarity check (fuzz.ratio, not
+       partial_ratio) with a high threshold — this catches minor
+       typos in the full name without being fooled by two unrelated
+       companies simply sharing one generic word like "Construction"
+       or "Builders", which partial_ratio was incorrectly treating as
+       near-identical.
     """
     text_lower = rfq_text.lower()
 
@@ -46,11 +57,26 @@ def suggest_customer(rfq_text: str, customers: list[dict]) -> dict | None:
         if not customer_name:
             continue
 
-        score = fuzz.partial_ratio(customer_name.lower(), text_lower)
+        customer_name_lower = customer_name.lower()
 
-        if score > best_score:
-            best_score = score
-            best_customer = customer
+        if customer_name_lower in text_lower:
+            return {
+                "customer_id": customer.get("customer_id"),
+                "customer_name": customer.get("customer_name"),
+                "match_score": 100.0,
+            }
+
+        for line in rfq_text.splitlines():
+            line_lower = line.strip().lower()
+
+            if not line_lower:
+                continue
+
+            score = fuzz.ratio(customer_name_lower, line_lower)
+
+            if score > best_score:
+                best_score = score
+                best_customer = customer
 
     if best_customer is None or best_score < MINIMUM_CUSTOMER_MATCH_SCORE:
         return None
@@ -75,9 +101,6 @@ def extract_candidate_company_name(rfq_text: str) -> str | None:
     labeled_match = _LABELED_NAME_PATTERN.search(rfq_text)
     if labeled_match:
         candidate = labeled_match.group(1).strip()
-        # Guard against accidentally capturing a full sentence if the
-        # regex over-matched (e.g. a "Customer:" line with trailing
-        # commentary) — a real company name is short.
         if 2 <= len(candidate) <= 80:
             return candidate
 
@@ -126,12 +149,6 @@ def create_new_customer(
 
     file_exists = CUSTOMERS_CSV_PATH.exists()
 
-    # Guard against a missing trailing newline on the existing file —
-    # without this, appending would glue the new row onto the end of
-    # the last existing line instead of starting a new one, silently
-    # corrupting the CSV (this happened during testing; worth keeping
-    # this check permanently since a hand-edited CSV could easily lack
-    # a trailing newline again in the future).
     if file_exists:
         with open(CUSTOMERS_CSV_PATH, "rb") as f:
             f.seek(-1, 2)
